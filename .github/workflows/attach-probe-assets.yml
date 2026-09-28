@@ -1,0 +1,47 @@
+name: Attach probe assets to v1
+
+# 把主仓库对应探测版的 4 个数据文件下载下来，
+# 连同本仓库根目录下已 patch 好的 manifest.json，一起传到本仓库的 v1 release。
+# 用 workflow 自带的 GITHUB_TOKEN 上传，绕开 uploads.github.com 的 surrogate 限制。
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: "Tag in dayifulalala-del/clink-language-packs to copy assets from"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download data files from main repo probe release
+        env:
+          TAG: ${{ inputs.source_tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+          base="https://github.com/dayifulalala-del/clink-language-packs/releases/download/${TAG}"
+          for f in wanxiang-source.json zh--zh.cime zh--zh.clex zh--zh.cngm; do
+            curl -sSL --fail -o "assets/$f" "$base/$f"
+          done
+          cp manifest.json assets/manifest.json
+          ls -l assets
+
+      - name: Upload all five files to v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd assets
+          gh release upload v1 \
+            manifest.json wanxiang-source.json \
+            zh--zh.cime zh--zh.clex zh--zh.cngm \
+            --clobber --repo "$GITHUB_REPOSITORY"
+          gh release view v1 --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'
